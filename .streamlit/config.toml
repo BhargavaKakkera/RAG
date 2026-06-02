@@ -1,0 +1,3 @@
+#just keep this while development stage 
+[server]
+fileWatcherType = "none"

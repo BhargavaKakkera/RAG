@@ -1,0 +1,14 @@
+streamlit
+python-dotenv
+pypdf
+langchain
+langchain-core
+langchain-text-splitters
+langchain-google-genai
+langchain-chroma
+langchain-ollama
+chromadb
+
+# Optional only if you choose HuggingFace embeddings in the UI:
+# langchain-huggingface
+# sentence-transformers
