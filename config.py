@@ -1,3 +1,4 @@
+
 from dataclasses import dataclass
 import os
 
@@ -38,4 +39,5 @@ class Settings:
 
 
 settings = Settings()
+
 
