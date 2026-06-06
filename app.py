@@ -1,5 +1,5 @@
 
-rom __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import replace
 from uuid import uuid4
