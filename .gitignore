@@ -220,3 +220,4 @@ __marimo__/
 .env
 chroma_db/
 .vscode/
+.streamlit/
