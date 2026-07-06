@@ -10,3 +10,4 @@ langchain-ollama
 chromadb
 langchain-huggingface
 sentence-transformers
+langchain-groq

@@ -1,14 +1,17 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from langchain_core.documents import Document
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 
 from prompts.templates import SUMMARY_PROMPTS
+from utils.timing import log_timing
 
 
-def _batch_documents(documents: list[Document], max_chars: int = 12000) -> list[str]:
+def _batch_documents(documents: list[Document], max_chars: int = 4000) -> list[str]:
     batches: list[str] = []
     current: list[str] = []
     current_chars = 0
@@ -37,7 +40,14 @@ def generate_summary(
     documents: list[Document],
     summary_type: str,
 ) -> str:
-    """Summarize PDFs with a map-reduce style LCEL flow."""
+    """
+    Summarize PDFs with a map-reduce style flow.
+
+    Optimizations:
+    - Build batches once.
+    - Parallelize map-step LLM calls across batches.
+    - Reduce unnecessary LLM calls by collapsing when only one batch is produced.
+    """
 
     if summary_type not in SUMMARY_PROMPTS:
         raise ValueError(f"Unsupported summary type: {summary_type}")
@@ -45,10 +55,42 @@ def generate_summary(
     prompt = SUMMARY_PROMPTS[summary_type]
     chain = prompt | llm | StrOutputParser()
 
-    batch_summaries = [
-        chain.invoke({"context": batch}) for batch in _batch_documents(documents)
-    ]
+    # Debug: confirm what model wrapper thinks it will call.
+    # Groq is OpenAI-compatible; some logs may show "openapi" wording even when the model is correct.
+    model_id = getattr(llm, "model", None) or getattr(llm, "model_name", None)
+    try:
+        # Avoid crashing if model attr isn't accessible.
+        from logging import getLogger
 
+        getLogger("rag.summary").info(
+            "Summary generation using llm model attr=%s summary_type=%s",
+            model_id,
+            summary_type,
+        )
+    except Exception:
+        pass
+
+    with log_timing("summary_batching"):
+        batches = _batch_documents(documents)
+
+    if not batches:
+        return ""
+
+    # Map step (parallel)
+    batch_summaries: list[str] = [""] * len(batches)
+    max_workers = min(8, max(1, len(batches)))
+
+    def _invoke_one(i: int, batch: str) -> tuple[int, str]:
+        return i, chain.invoke({"context": batch})
+
+    with log_timing("summary_generation"):
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = [ex.submit(_invoke_one, i, batch) for i, batch in enumerate(batches)]
+            for fut in as_completed(futures):
+                i, summary = fut.result()
+                batch_summaries[i] = summary
+
+    # Reduce step
     if len(batch_summaries) == 1:
         return batch_summaries[0]
 

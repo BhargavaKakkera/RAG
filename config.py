@@ -13,10 +13,17 @@ class Settings:
     """Central runtime settings loaded from environment variables."""
 
     google_api_key: str | None = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").lower()
-    embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "gemini").lower()
+    groq_api_key: str | None = os.getenv("GROQ_API_KEY")
+    llm_provider: str = os.getenv("LLM_PROVIDER", "groq").lower()
+    embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "huggingface").lower()
 
+
+    # Kept for compatibility; Groq is the default LLM provider.
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+    # Default Groq model(s). Keep these defaults wired to Groq.
+    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
     gemini_embedding_model: str = os.getenv(
         "GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-001"
     )
@@ -35,9 +42,21 @@ class Settings:
     default_similarity_threshold: float = float(
         os.getenv("DEFAULT_SIMILARITY_THRESHOLD", "0.35")
     )
+    default_prompt_context_budget: int = int(
+        os.getenv("DEFAULT_PROMPT_CONTEXT_BUDGET", "12000")
+    )
+    default_prompt_context_budget_ollama: int = int(
+        os.getenv("DEFAULT_PROMPT_CONTEXT_BUDGET_OLLAMA", "8000")
+    )
     max_history_messages: int = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
+    max_rewrite_history_messages: int = int(os.getenv("MAX_REWRITE_HISTORY_MESSAGES", "6"))
+    ollama_keep_alive: str = os.getenv("OLLAMA_KEEP_ALIVE", "10m")
+
+
 
 
 settings = Settings()
+
+
 
 
