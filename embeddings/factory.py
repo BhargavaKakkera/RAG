@@ -2,8 +2,16 @@
 from __future__ import annotations
 
 from langchain_core.embeddings import Embeddings
+import streamlit as st
 
 from config import Settings
+
+
+@st.cache_resource(show_spinner=False)
+def _cached_huggingface_embeddings(model_name: str) -> Embeddings:
+    from langchain_huggingface import HuggingFaceEmbeddings
+
+    return HuggingFaceEmbeddings(model_name=model_name)
 
 
 def get_embedding_model(settings: Settings) -> Embeddings:
@@ -12,6 +20,7 @@ def get_embedding_model(settings: Settings) -> Embeddings:
     provider = settings.embedding_provider
 
     if provider == "gemini":
+
         if not settings.google_api_key:
             raise ValueError("GOOGLE_API_KEY is required for Gemini embeddings.")
 
@@ -23,9 +32,8 @@ def get_embedding_model(settings: Settings) -> Embeddings:
         )
 
     if provider == "huggingface":
-        from langchain_huggingface import HuggingFaceEmbeddings
+        return _cached_huggingface_embeddings(settings.huggingface_embedding_model)
 
-        return HuggingFaceEmbeddings(model_name=settings.huggingface_embedding_model)
 
     if provider == "ollama":
         from langchain_ollama import OllamaEmbeddings

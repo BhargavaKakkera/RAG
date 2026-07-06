@@ -113,10 +113,53 @@ def create_conversational_rag_chain(
             context_chars=context_chars,
             history_messages=0,
         ):
+            from utils.llm_invoke import invoke_llm
+
             # History is folded into standalone_question when rewrite runs.
             # Omitting chat history here avoids duplicating turns in local LLM prompts.
-            answer = answer_chain.invoke(
-                {
+            provider = llm_provider
+            # Best-effort model id; used only for logging/retry logic.
+            original_model = (
+                getattr(llm, "model", None)
+                or getattr(llm, "model_name", None)
+                or llm_provider
+            )
+
+
+
+            def _set_model(m: str):
+                # Best-effort model switch for the current request.
+                # Some wrappers can be frozen; ignore failures.
+                try:
+                    setattr(llm, "model", m)
+                except Exception:
+                    pass
+
+
+            answer = invoke_llm(
+                provider=llm_provider,
+                original_model=original_model,
+                chain_name="QA",
+                fallback_model="meta-llama/llama-4-scout-17b-16e-instruct",
+                model_setter=_set_model,
+
+                chain_callable=lambda: answer_chain.invoke(
+
+                    {
+                        "question": inputs.get(
+                            "standalone_question",
+                            inputs["question"],
+                        ),
+                        "history": [],
+                        "context": inputs["context"],
+                        "mode": mode,
+                        "mode_instruction": MODE_INSTRUCTIONS.get(
+                            mode,
+                            MODE_INSTRUCTIONS["Normal Mode"],
+                        ),
+                    }
+                ),
+                inputs={
                     "question": inputs.get(
                         "standalone_question",
                         inputs["question"],
@@ -128,8 +171,9 @@ def create_conversational_rag_chain(
                         mode,
                         MODE_INSTRUCTIONS["Normal Mode"],
                     ),
-                }
+                },
             )
+
         stage_timings["llm_generation"] = time.perf_counter() - generation_start
         stage_timings["qa_total"] = stage_timings.get("qa_total", 0.0) + stage_timings[
             "llm_generation"

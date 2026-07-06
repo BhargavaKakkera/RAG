@@ -259,8 +259,38 @@ def _generate_document_metadata(llm, documents, selected_sources: list[str] | No
 
             context = "\n\n".join(parts)
             chain = DOCUMENT_METADATA_PROMPT | llm
-            raw = chain.invoke({"context": context, "title": source, "page_count": page_count})
+            from utils.llm_invoke import invoke_llm
+
+            # Metadata: use common retry/fallback only for this request.
+            provider = effective_settings.llm_provider
+            original_model = (
+                getattr(llm, "model", None)
+                or getattr(llm, "model_name", None)
+                or (effective_settings.groq_model if provider == "groq" else "unknown")
+            )
+
+            def _set_model(m: str):
+                # Some LCEL/LLM wrappers may expose frozen properties like `mode`.
+                # Best-effort: only set `model` if it is actually mutable.
+                try:
+                    setattr(llm, "model", m)
+                except Exception:
+                    pass
+
+            raw = invoke_llm(
+                provider=provider,
+                original_model=original_model,
+                chain_name="Metadata",
+                fallback_model="meta-llama/llama-4-scout-17b-16e-instruct",
+                model_setter=_set_model,
+                chain_callable=lambda: chain.invoke(
+                    {"context": context, "title": source, "page_count": page_count}
+                ),
+                inputs={"context": context, "title": source, "page_count": page_count},
+            )
+
             raw_text = getattr(raw, "content", raw)
+
 
             try:
                 import json
@@ -349,6 +379,7 @@ with st.sidebar:
                 "llama-3.1-8b-instant",
                 "openai/gpt-oss-120b",
                 "groq/compound",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
             ],
         )
     else:
