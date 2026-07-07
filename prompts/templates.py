@@ -64,8 +64,7 @@ QA_PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
-# Used to generate document-level metadata (title/summary/topics/keywords/TOC/page count)
-# Return MUST be valid JSON.
+# Output must be valid JSON.
 DOCUMENT_METADATA_PROMPT = ChatPromptTemplate.from_messages(
     [
         (

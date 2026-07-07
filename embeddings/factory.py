@@ -15,8 +15,6 @@ def _cached_huggingface_embeddings(model_name: str) -> Embeddings:
 
 
 def get_embedding_model(settings: Settings) -> Embeddings:
-    """Create the configured embedding model."""
-
     provider = settings.embedding_provider
 
     if provider == "gemini":

@@ -8,9 +8,7 @@ from typing import Any
 
 logger = logging.getLogger("rag.llm")
 
-
 FALLBACK_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-
 
 
 @dataclass(frozen=True)
@@ -20,8 +18,8 @@ class InvokeResult:
 
 def _is_timeout_error(exc: BaseException) -> bool:
     msg = str(exc).lower()
-    # Covers common timeout patterns across httpx/requests/SDKs.
     return "timeout" in msg or "timed out" in msg or "deadline" in msg
+
 
 
 def _is_http_429(exc: BaseException) -> bool:
@@ -46,11 +44,7 @@ def _invoke_with_model(
     chain_callable: Callable[[], Any],
     inputs: dict[str, Any],
 ) -> tuple[Any, float]:
-    """Set model on the supplied wrapper (if supported) and invoke chain."""
-
     start = time.perf_counter()
-    # model_setter is expected to reconfigure the wrapper for the duration of the call.
-    # If wrapper does not support it, setter can no-op.
     model_setter(model)
     try:
         result = chain_callable()
@@ -65,21 +59,18 @@ def invoke_llm(
     provider: str,
     original_model: str,
     chain_name: str,
-    # Fallback model must be used only for the current failed request.
     fallback_model: str = FALLBACK_GROQ_MODEL,
     max_retries: int = 3,
     retry_backoff_seconds: tuple[int, int, int] = (1, 2, 4),
-    # model_setter should update the chain/llm wrapper so the *current request* uses the passed model.
     model_setter: Callable[[str], Any],
-    # chain_callable should perform the actual invoke with the given inputs.
     chain_callable: Callable[[], Any],
     inputs: dict[str, Any],
 ) -> Any:
-    """Common invoke helper with: retry on 429/503/timeout; fallback to scout-17b only for the final failed request.
+    """Invoke LLM with retry on 429/503/timeout and fallback to scout-17b.
 
     Notes:
-    - Retries MUST use the SAME model.
-    - Fallback MUST be used only for the current request; future requests keep user-selected model.
+    - Retries use the same model.
+    - Fallback is only used for the current request.
     """
 
     retry_count = 0

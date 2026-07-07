@@ -8,8 +8,6 @@ def format_documents_for_prompt(
     documents: list[Document],
     max_chars: int | None = None,
 ) -> str:
-    """Render retrieved chunks into a compact context block within an optional budget."""
-
     formatted_chunks: list[str] = []
     used_chars = 0
 
@@ -37,8 +35,6 @@ def format_documents_for_prompt(
 
 
 def source_rows(documents: list[Document]) -> list[dict[str, object]]:
-    """Build display-friendly source metadata for Streamlit."""
-
     rows: list[dict[str, object]] = []
     for index, document in enumerate(documents, start=1):
         rows.append(

@@ -219,5 +219,6 @@ __marimo__/
 
 .env
 chroma_db/
+cache/
 .vscode/
 .streamlit/

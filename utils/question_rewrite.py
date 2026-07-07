@@ -34,11 +34,7 @@ _ANAPHORA_PATTERNS = [
 
 
 def needs_question_rewrite(question: str, history: list[BaseMessage]) -> bool:
-    """
-    Skip the rewrite LLM call when the question is already self-contained.
-
-    Rewrite only when chat history exists and the question likely depends on it.
-    """
+    """Check if the question requires rewriting based on history and context."""
 
     if not history:
         return False

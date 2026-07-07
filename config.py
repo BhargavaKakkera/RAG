@@ -40,7 +40,7 @@ class Settings:
     default_chunk_overlap: int = int(os.getenv("DEFAULT_CHUNK_OVERLAP", "150"))
     default_retrieval_k: int = int(os.getenv("DEFAULT_RETRIEVAL_K", "5"))
     default_similarity_threshold: float = float(
-        os.getenv("DEFAULT_SIMILARITY_THRESHOLD", "0.35")
+        os.getenv("DEFAULT_SIMILARITY_THRESHOLD", "0.0")
     )
     default_prompt_context_budget: int = int(
         os.getenv("DEFAULT_PROMPT_CONTEXT_BUDGET", "12000")

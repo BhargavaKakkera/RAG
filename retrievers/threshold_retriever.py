@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def adaptive_retrieval_k(question: str, max_k: int) -> int:
-    """Choose retrieval K based on question complexity, capped by user max K."""
-
     q = question.strip().lower()
     comparison_markers = [
         "compare",
@@ -60,7 +58,7 @@ def adaptive_retrieval_k(question: str, max_k: int) -> int:
 class ThresholdRetriever:
     """Semantic retriever with threshold filtering and graceful fallback."""
 
-    vectorstore: object
+    vectorstore: object  # expects a Chroma-like interface with similarity_search_with_relevance_scores
     k: int
     similarity_threshold: float
 
@@ -74,11 +72,21 @@ class ThresholdRetriever:
     ) -> list[Document]:
         filtered: list[Document] = []
         for document, score in scored_docs:
-            relevance = float(score)
-            if relevance >= threshold:
-                document.metadata["similarity_score"] = round(relevance, 4)
+            s = float(score)
+            # langchain-chroma's `similarity_search_with_relevance_scores` typically returns
+            # values where *higher is better* (relevance). However, with cosine distance
+            # configs you may observe lower numbers for better matches.
+            #
+            # Empirical-safe handling:
+            # - If caller thresholds for larger-is-better, use >=.
+            # - If that yields zero hits, fallback logic in retrieve() will relax.
+            #
+            # We still store the raw score for inspection.
+            document.metadata["similarity_score"] = round(s, 4)
+            if s >= threshold:
                 filtered.append(document)
         return filtered
+
 
     def _best_effort(
         self,

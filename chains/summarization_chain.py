@@ -40,14 +40,6 @@ def generate_summary(
     summary_type: str,
 ) -> str:
 
-    """
-    Summarize PDFs with a map-reduce style flow.
-
-    Optimizations:
-    - Build batches once.
-    - Parallelize map-step LLM calls across batches.
-    - Reduce unnecessary LLM calls by collapsing when only one batch is produced.
-    """
 
     if summary_type not in SUMMARY_PROMPTS:
         raise ValueError(f"Unsupported summary type: {summary_type}")
@@ -55,11 +47,8 @@ def generate_summary(
     prompt = SUMMARY_PROMPTS[summary_type]
     chain = prompt | llm | StrOutputParser()
 
-    # Debug: confirm what model wrapper thinks it will call.
-    # Groq is OpenAI-compatible; some logs may show "openapi" wording even when the model is correct.
     model_id = getattr(llm, "model", None) or getattr(llm, "model_name", None)
     try:
-        # Avoid crashing if model attr isn't accessible.
         from logging import getLogger
 
         getLogger("rag.summary").info(
@@ -70,13 +59,13 @@ def generate_summary(
     except Exception:
         pass
 
+
     with log_timing("summary_batching"):
         batches = _batch_documents(documents)
 
     if not batches:
         return ""
 
-    # Map step (parallel)
     batch_summaries: list[str] = [""] * len(batches)
 
     # Prevent Groq 429 rate limits: summaries run in parallel map calls.
@@ -86,8 +75,7 @@ def generate_summary(
     def _invoke_one(i: int, batch: str) -> tuple[int, str]:
         from utils.llm_invoke import invoke_llm
 
-        provider = "groq"  # summaries only use Groq retry logic per requirements
-        # Best-effort original model id.
+        provider = "groq"
         original_model = (
             getattr(llm, "model", None) or getattr(llm, "model_name", None) or "unknown"
         )
@@ -97,7 +85,6 @@ def generate_summary(
                 setattr(llm, "model", m)
             except Exception:
                 pass
-
 
         summary_text = invoke_llm(
             provider=provider,
@@ -111,18 +98,14 @@ def generate_summary(
         )
         return i, summary_text
 
-
-
     with log_timing("summary_generation"):
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            # Submit only once; stability rules handle per-batch retry/fallback.
             futures = [ex.submit(_invoke_one, i, batch) for i, batch in enumerate(batches)]
+
             for fut in as_completed(futures):
                 i, summary = fut.result()
                 batch_summaries[i] = summary
 
-
-    # Reduce step
     if len(batch_summaries) == 1:
         return batch_summaries[0]
 

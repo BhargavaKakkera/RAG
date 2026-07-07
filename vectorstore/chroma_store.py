@@ -16,11 +16,23 @@ COLLECTION_PREFIX = "pdf_rag_"
 COSINE_COLLECTION_METADATA = {"hnsw:space": "cosine"}
 
 
-def compute_upload_fingerprint(uploaded_files) -> str:
-    """Deterministic SHA256 over all uploaded PDF bytes (sorted by filename)."""
+def compute_upload_fingerprint(
+    uploaded_files,
+    *,
+    chunk_size: int | None = None,
+    chunk_overlap: int | None = None,
+) -> str:
+    """SHA256 fingerprint over PDF bytes, including chunking parameters so changing them triggers re-indexing."""
 
     sorted_files = sorted(uploaded_files, key=lambda f: f.name)
     digest = sha256()
+
+    # Include chunking config (if provided) so embeddings are consistent.
+    digest.update(f"chunk_size={chunk_size}".encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(f"chunk_overlap={chunk_overlap}".encode("utf-8"))
+    digest.update(b"\0")
+
     for uploaded_file in sorted_files:
         try:
             content = uploaded_file.getvalue()
@@ -31,7 +43,9 @@ def compute_upload_fingerprint(uploaded_files) -> str:
         digest.update(b"\0")
         digest.update(content)
         digest.update(b"\0")
+
     return digest.hexdigest()
+
 
 
 def collection_name_for_fingerprint(fingerprint: str) -> str:
@@ -88,8 +102,6 @@ def build_chroma_store(
     settings: Settings,
     collection_name: str,
 ) -> Chroma:
-    """Create a Chroma collection from chunked documents."""
-
     if not documents:
         raise ValueError("Cannot build a vector store without documents.")
 
@@ -110,12 +122,6 @@ def get_or_build_chroma_store(
     settings: Settings,
     fingerprint: str,
 ) -> tuple[Chroma, bool]:
-    """
-    Reuse an existing Chroma collection when the same PDF fingerprint is indexed.
-
-    Returns (vectorstore, reused_existing_collection).
-    """
-
     collection_name = collection_name_for_fingerprint(fingerprint)
     if collection_exists(settings, collection_name):
         with log_timing("vector_store_reuse"):

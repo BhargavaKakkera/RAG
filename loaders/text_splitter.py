@@ -12,8 +12,6 @@ def chunk_documents(
     chunk_size: int,
     chunk_overlap: int,
 ) -> list[Document]:
-    """Split page documents into overlapping chunks for semantic retrieval."""
-
     if chunk_overlap >= chunk_size:
         raise ValueError("Chunk overlap must be smaller than chunk size.")
 

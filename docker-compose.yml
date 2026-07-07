@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  rag-assistant:
+    build: .
+    container_name: pdf-rag-assistant
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      # Persists ChromaDB vector collections on the host machine
+      - ./chroma_db:/app/chroma_db
+      # Persists HuggingFace model cache and system cache on the host machine
+      - ./cache:/app/cache
+    restart: always

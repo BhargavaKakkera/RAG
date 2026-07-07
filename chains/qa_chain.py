@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -36,7 +35,6 @@ def create_conversational_rag_chain(
     llm_provider: str = "unknown",
     llm_model: str = "unknown",
 ) -> RunnableWithMessageHistory:
-    """Create an LCEL conversational RAG chain with message history."""
 
     question_rewriter = CONDENSE_QUESTION_PROMPT | llm | StrOutputParser()
     answer_chain = QA_PROMPT | llm | StrOutputParser()
@@ -125,8 +123,6 @@ def create_conversational_rag_chain(
                 or llm_provider
             )
 
-
-
             def _set_model(m: str):
                 # Best-effort model switch for the current request.
                 # Some wrappers can be frozen; ignore failures.
@@ -134,7 +130,6 @@ def create_conversational_rag_chain(
                     setattr(llm, "model", m)
                 except Exception:
                     pass
-
 
             answer = invoke_llm(
                 provider=llm_provider,

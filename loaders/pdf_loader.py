@@ -10,8 +10,6 @@ from utils.timing import log_timing
 
 
 def load_uploaded_pdfs(uploaded_files: Iterable) -> list[Document]:
-    """Extract page-level LangChain Documents from Streamlit uploaded PDFs."""
-
     documents: list[Document] = []
 
     with log_timing("pdf_loading"):

@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+__pycache__
+.pytest_cache
+chroma_db/
+cache/
+.env
+.streamlit
+.vscode
+*.vhdx
+*.tar

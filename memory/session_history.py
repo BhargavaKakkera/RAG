@@ -22,8 +22,6 @@ class TrimmedChatMessageHistory(BaseChatMessageHistory):
 
 
 class SessionHistoryStore:
-    """Small registry used by RunnableWithMessageHistory."""
-
     def __init__(self, max_messages: int):
         self.max_messages = max_messages
         self._store: dict[str, TrimmedChatMessageHistory] = {}

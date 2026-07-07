@@ -9,6 +9,7 @@ import streamlit as st
 from uuid import uuid4
 
 from chains.model_factory import get_chat_model
+
 from chains.qa_chain import create_conversational_rag_chain
 from chains.summarization_chain import generate_summary
 from config import settings
@@ -45,6 +46,7 @@ st.set_page_config(
 def init_session_state() -> None:
     defaults = {
         "session_id": uuid4().hex,
+
         "messages": [],
         "documents": [],
         "chunks": [],
@@ -62,13 +64,16 @@ def init_session_state() -> None:
 
 
 
+
     for key, value in defaults.items():
+
         if key not in st.session_state:
             st.session_state[key] = value
 
 
 def reset_chat() -> None:
     st.session_state.messages = []
+
     st.session_state.last_sources = []
     if st.session_state.history_store is not None:
         st.session_state.history_store.clear(st.session_state.session_id)
@@ -103,9 +108,8 @@ def build_effective_settings(
 
 
 def _detect_intent(question: str) -> str:
-    """Route user input before the RAG pipeline."""
-
     q = question.strip().lower()
+
     q_norm = re.sub(r"\s+", " ", q)
 
     overview_patterns = [
@@ -223,10 +227,14 @@ def _format_toc(metadata: dict, sources: list[str]) -> str:
     return "\n\n".join(parts).strip()
 
 
-def _generate_document_metadata(llm, documents, selected_sources: list[str] | None = None) -> dict:
-    """Generate document-level metadata once after indexing."""
+def _generate_document_metadata(
+    llm,
+    documents,
+    selected_sources: list[str] | None = None,
+) -> dict:
 
     grouped: dict[str, list] = {}
+
     for document in documents:
         source = document.metadata.get("source", "Unknown source")
         grouped.setdefault(source, []).append(document)
@@ -261,7 +269,7 @@ def _generate_document_metadata(llm, documents, selected_sources: list[str] | No
             chain = DOCUMENT_METADATA_PROMPT | llm
             from utils.llm_invoke import invoke_llm
 
-            # Metadata: use common retry/fallback only for this request.
+            # Metadata retry/fallback is scoped to this request.
             provider = effective_settings.llm_provider
             original_model = (
                 getattr(llm, "model", None)
@@ -320,7 +328,7 @@ def _ensure_metadata_and_summary_cache(
     effective_settings,
     force_regenerate: bool = False,
 ) -> None:
-    """Regenerate metadata and cached summaries only when the indexed PDF fingerprint changes."""
+
 
     fingerprint = compute_upload_fingerprint(uploaded_files)
     if (
@@ -437,7 +445,7 @@ effective_settings = build_effective_settings(
 
 
 def current_llm_fingerprint(settings) -> str:
-    """Fingerprint for the currently selected LLM (provider+model)."""
+
     return (
         f"{settings.llm_provider}:"
         f"{settings.gemini_model}:"
@@ -464,7 +472,8 @@ with index_col:
     )
 
 with stats_col:
-    # Index banner: only show after a *successful* indexing run for the current fingerprint.
+    
+
     current_fingerprint = (
         compute_upload_fingerprint(uploaded_files)
         if uploaded_files
@@ -484,72 +493,83 @@ with stats_col:
 
 
 if index_clicked:
-    # Reset the banner for this indexing attempt; it will be re-enabled only on success.
     st.session_state.show_index_banner = False
     st.session_state.last_index_banner_fingerprint = None
 
-    try:
-        documents = load_uploaded_pdfs(uploaded_files)
+    with st.status("Indexing uploaded PDFs...", expanded=True) as status:
+        try:
+            documents = load_uploaded_pdfs(uploaded_files)
 
+            with log_timing("chunking"):
+                chunks = chunk_documents(
+                    documents,
+                    effective_settings.default_chunk_size,
+                    effective_settings.default_chunk_overlap,
+                )
 
-        with log_timing("chunking"):
-            chunks = chunk_documents(
-                documents,
-                effective_settings.default_chunk_size,
-                effective_settings.default_chunk_overlap,
+            fingerprint = compute_upload_fingerprint(
+                uploaded_files,
+                chunk_size=effective_settings.default_chunk_size,
+                chunk_overlap=effective_settings.default_chunk_overlap,
+            )
+            embedding_model = get_embedding_model(effective_settings)
+
+            with log_timing("embedding_generation"):
+                vectorstore, reused_collection = get_or_build_chroma_store(
+                    documents,
+                    chunks,
+                    embedding_model,
+                    effective_settings,
+                    fingerprint,
+                )
+
+            if reused_collection:
+                logger.info(
+                    "Reused existing Chroma collection for fingerprint %s", fingerprint
+                )
+                st.session_state.chunks = chunks
+            else:
+                st.session_state.chunks = chunks
+
+            with log_timing(
+                "model_loading", provider=effective_settings.llm_provider
+            ):
+                llm = get_chat_model(effective_settings)
+
+            st.session_state.llm_fingerprint = current_llm_fingerprint(
+                effective_settings
             )
 
-        fingerprint = compute_upload_fingerprint(uploaded_files)
-        embedding_model = get_embedding_model(effective_settings)
+            with log_timing("history_setup"):
+                history_store = SessionHistoryStore(
+                    effective_settings.max_history_messages
+                )
 
-        with log_timing("embedding_generation"):
-            vectorstore, reused_collection = get_or_build_chroma_store(
-                documents,
-                chunks,
-                embedding_model,
-                effective_settings,
-                fingerprint,
+            st.session_state.documents = documents
+            st.session_state.vectorstore = vectorstore
+            st.session_state.llm = llm
+            st.session_state.history_store = history_store
+
+            # Lazy metadata generation avoids latency on initial PDF indexing.
+            reset_chat()
+
+            st.session_state.show_index_banner = True
+            st.session_state.last_index_banner_fingerprint = fingerprint
+
+            reuse_note = (
+                " Reused existing embeddings." if reused_collection else ""
+            )
+            pages_count = len(documents)
+            st.success(
+                f"PDFs indexed successfully.{reuse_note} "
+                f"(Extracted {pages_count} pages → {len(chunks)} chunks) "
+                f"Ask a question below."
             )
 
-        if reused_collection:
-            logger.info("Reused existing Chroma collection for fingerprint %s", fingerprint)
-            st.session_state.chunks = chunks
-        else:
-            st.session_state.chunks = chunks
+        except Exception as exc:
+            st.error(f"Indexing failed: {exc}")
 
-        with log_timing("model_loading", provider=effective_settings.llm_provider):
-            llm = get_chat_model(effective_settings)
 
-        st.session_state.llm_fingerprint = current_llm_fingerprint(effective_settings)
-
-        with log_timing("history_setup"):
-
-            history_store = SessionHistoryStore(effective_settings.max_history_messages)
-
-        st.session_state.documents = documents
-        st.session_state.vectorstore = vectorstore
-        st.session_state.llm = llm
-        st.session_state.history_store = history_store
-
-        _ensure_metadata_and_summary_cache(
-            llm,
-            documents,
-            uploaded_files,
-            effective_settings,
-            force_regenerate=not reused_collection,
-        )
-
-        reset_chat()
-
-        # Enable the banner for the fingerprint that was successfully indexed.
-        st.session_state.show_index_banner = True
-        st.session_state.last_index_banner_fingerprint = fingerprint
-
-        reuse_note = " Reused existing embeddings." if reused_collection else ""
-        st.success(f"PDFs indexed successfully.{reuse_note} Ask a question below.")
-
-    except Exception as exc:
-        st.error(f"Indexing failed: {exc}")
 
 chat_tab, sources_tab, summary_tab = st.tabs(["Chat", "Sources", "Summaries"])
 
@@ -585,11 +605,22 @@ with chat_tab:
                 st.session_state.last_sources = []
             else:
                 try:
+                    # Ensure document metadata exists before formatting.
                     if st.session_state.document_metadata is None:
-                        st.info("Index PDFs first to generate metadata.")
-                        raise RuntimeError("Document metadata not initialized.")
+                        with st.spinner(
+                            "Generating document metadata (title/summary/topics/TOC)..."
+                        ):
+                            _ensure_metadata_and_summary_cache(
+                                st.session_state.llm,
+                                st.session_state.documents,
+                                uploaded_files,
+                                effective_settings,
+                                force_regenerate=False,
+                            )
 
                     sources = list(st.session_state.document_metadata.keys())
+
+
                     if intent == "document_overview":
                         answer = _format_document_overview(
                             st.session_state.document_metadata,
@@ -599,9 +630,24 @@ with chat_tab:
                         answer = _format_topics(st.session_state.document_metadata, sources)
                     elif intent == "table_of_contents":
                         answer = _format_toc(st.session_state.document_metadata, sources)
+
                     elif intent == "summary_request":
+                        if st.session_state.document_metadata is None:
+                            st.info("Index PDFs first (or generate metadata) to create summaries.")
+                            with st.spinner(
+                                "Generating document metadata (title/summary/topics/TOC)..."
+                            ):
+                                _ensure_metadata_and_summary_cache(
+                                    st.session_state.llm,
+                                    st.session_state.documents,
+                                    uploaded_files,
+                                    effective_settings,
+                                    force_regenerate=False,
+                                )
+
                         summary_type = _select_summary_type_from_question(question)
                         cache_key = (st.session_state.indexed_fingerprint, summary_type)
+
 
                         if cache_key in st.session_state.summary_cache:
                             answer = st.session_state.summary_cache[cache_key]
@@ -710,7 +756,6 @@ with summary_tab:
         )
         if st.button("Generate summary", use_container_width=True):
             try:
-                # Ensure the LLM matches the currently selected provider/model.
                 selected_fingerprint = current_llm_fingerprint(effective_settings)
                 if (
                     st.session_state.llm is None
