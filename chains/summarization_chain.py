@@ -38,6 +38,7 @@ def generate_summary(
     llm: BaseChatModel,
     documents: list[Document],
     summary_type: str,
+    llm_provider: str = "groq",
 ) -> str:
 
 
@@ -75,9 +76,15 @@ def generate_summary(
     def _invoke_one(i: int, batch: str) -> tuple[int, str]:
         from utils.llm_invoke import invoke_llm
 
-        provider = "groq"
+        provider = llm_provider
         original_model = (
             getattr(llm, "model", None) or getattr(llm, "model_name", None) or "unknown"
+        )
+        # Only Groq has a remote fallback model; for Gemini/Ollama stay on the same model.
+        fallback = (
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+            if llm_provider == "groq"
+            else original_model
         )
 
         def _set_model(m: str):
@@ -90,7 +97,7 @@ def generate_summary(
             provider=provider,
             original_model=original_model,
             chain_name="Summary",
-            fallback_model="meta-llama/llama-4-scout-17b-16e-instruct",
+            fallback_model=fallback,
             max_retries=3,
             model_setter=_set_model,
             chain_callable=lambda: chain.invoke({"context": batch}),
@@ -121,9 +128,15 @@ def generate_summary(
 
     from utils.llm_invoke import invoke_llm
 
-    provider = "groq"
+    provider = llm_provider
     original_model = (
         getattr(llm, "model", None) or getattr(llm, "model_name", None) or "unknown"
+    )
+    # Only Groq has a remote fallback model; for Gemini/Ollama stay on the same model.
+    fallback = (
+        "meta-llama/llama-4-scout-17b-16e-instruct"
+        if llm_provider == "groq"
+        else original_model
     )
 
     def _set_model(m: str):
@@ -136,7 +149,7 @@ def generate_summary(
         provider=provider,
         original_model=original_model,
         chain_name="Summary",
-        fallback_model="meta-llama/llama-4-scout-17b-16e-instruct",
+        fallback_model=fallback,
         max_retries=3,
         model_setter=_set_model,
         chain_callable=lambda: chain.invoke({"context": combined_context}),

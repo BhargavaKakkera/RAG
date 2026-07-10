@@ -131,42 +131,28 @@ def create_conversational_rag_chain(
                 except Exception:
                     pass
 
+            llm_inputs = {
+                "question": inputs.get(
+                    "standalone_question",
+                    inputs["question"],
+                ),
+                "history": [],
+                "context": inputs["context"],
+                "mode": mode,
+                "mode_instruction": MODE_INSTRUCTIONS.get(
+                    mode,
+                    MODE_INSTRUCTIONS["Normal Mode"],
+                ),
+            }
+
             answer = invoke_llm(
                 provider=llm_provider,
                 original_model=original_model,
                 chain_name="QA",
                 fallback_model="meta-llama/llama-4-scout-17b-16e-instruct",
                 model_setter=_set_model,
-
-                chain_callable=lambda: answer_chain.invoke(
-
-                    {
-                        "question": inputs.get(
-                            "standalone_question",
-                            inputs["question"],
-                        ),
-                        "history": [],
-                        "context": inputs["context"],
-                        "mode": mode,
-                        "mode_instruction": MODE_INSTRUCTIONS.get(
-                            mode,
-                            MODE_INSTRUCTIONS["Normal Mode"],
-                        ),
-                    }
-                ),
-                inputs={
-                    "question": inputs.get(
-                        "standalone_question",
-                        inputs["question"],
-                    ),
-                    "history": [],
-                    "context": inputs["context"],
-                    "mode": mode,
-                    "mode_instruction": MODE_INSTRUCTIONS.get(
-                        mode,
-                        MODE_INSTRUCTIONS["Normal Mode"],
-                    ),
-                },
+                chain_callable=lambda: answer_chain.invoke(llm_inputs),
+                inputs=llm_inputs,
             )
 
         stage_timings["llm_generation"] = time.perf_counter() - generation_start

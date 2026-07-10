@@ -66,12 +66,6 @@ def invoke_llm(
     chain_callable: Callable[[], Any],
     inputs: dict[str, Any],
 ) -> Any:
-    """Invoke LLM with retry on 429/503/timeout and fallback to scout-17b.
-
-    Notes:
-    - Retries use the same model.
-    - Fallback is only used for the current request.
-    """
 
     retry_count = 0
     fallback_used = False
@@ -106,7 +100,7 @@ def invoke_llm(
                 elapsed=elapsed,
             )
             return result
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc: 
             if _should_retry(exc) and retry_count < max_retries:
                 backoff = retry_backoff_seconds[retry_count]
                 retry_count += 1

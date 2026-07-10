@@ -73,15 +73,6 @@ class ThresholdRetriever:
         filtered: list[Document] = []
         for document, score in scored_docs:
             s = float(score)
-            # langchain-chroma's `similarity_search_with_relevance_scores` typically returns
-            # values where *higher is better* (relevance). However, with cosine distance
-            # configs you may observe lower numbers for better matches.
-            #
-            # Empirical-safe handling:
-            # - If caller thresholds for larger-is-better, use >=.
-            # - If that yields zero hits, fallback logic in retrieve() will relax.
-            #
-            # We still store the raw score for inspection.
             document.metadata["similarity_score"] = round(s, 4)
             if s >= threshold:
                 filtered.append(document)

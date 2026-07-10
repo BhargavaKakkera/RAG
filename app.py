@@ -364,17 +364,17 @@ with st.sidebar:
 
     llm_provider = st.selectbox(
         "LLM Provider",
-        ["groq", "ollama"],
-        index=["groq", "ollama"].index(settings.llm_provider)
-        if settings.llm_provider in ["groq", "ollama"]
+        ["groq", "ollama", "gemini"],
+        index=["groq", "ollama", "gemini"].index(settings.llm_provider)
+        if settings.llm_provider in ["groq", "ollama", "gemini"]
         else 0,
     )
 
     embedding_provider = st.selectbox(
         "Embedding Provider",
-        ["huggingface", "ollama"],
-        index=["huggingface", "ollama"].index(settings.embedding_provider)
-        if settings.embedding_provider in ["huggingface", "ollama"]
+        ["huggingface", "ollama", "gemini"],
+        index=["huggingface", "ollama", "gemini"].index(settings.embedding_provider)
+        if settings.embedding_provider in ["huggingface", "ollama", "gemini"]
         else 0,
     )
 
@@ -389,6 +389,17 @@ with st.sidebar:
                 "groq/compound",
                 "meta-llama/llama-4-scout-17b-16e-instruct",
             ],
+        )
+    elif llm_provider == "gemini":
+        llm_model = st.selectbox(
+            "Model Selection",
+            [
+                "gemini-2.5-flash",
+                "gemini-2.5-pro",
+                "gemini-2.0-flash",
+                "gemini-1.5-pro",
+            ],
+            index=0,
         )
     else:
         llm_model = st.text_input("Llama Model (via Ollama)", value=settings.ollama_model)
@@ -455,11 +466,31 @@ def current_llm_fingerprint(settings) -> str:
 
 
 uploaded_files = st.file_uploader(
-
     "Upload PDF files",
     type=["pdf"],
     accept_multiple_files=True,
 )
+
+# ---- Auto‑reset caches when the uploaded file set changes ----
+if uploaded_files:
+    current_fingerprint = compute_upload_fingerprint(uploaded_files)
+else:
+    current_fingerprint = None
+
+prev_fp = st.session_state.get("uploaded_fingerprint")
+if current_fingerprint != prev_fp:
+    # Store the new fingerprint
+    st.session_state.uploaded_fingerprint = current_fingerprint
+
+    # Clear caches that depend on the uploaded PDFs
+    st.session_state.documents = []
+    st.session_state.vectorstore = None
+    st.session_state.document_metadata = None
+    st.session_state.summary_cache = {}
+    st.session_state.last_sources = []
+    st.session_state.indexed_fingerprint = None
+    # Optional: clear the chat history to avoid confusion
+    st.session_state.messages = []
 
 index_col, stats_col = st.columns([1, 2])
 
@@ -606,17 +637,16 @@ with chat_tab:
             else:
                 try:
                     # Ensure document metadata exists before formatting.
+                    # Note: _ensure_metadata_and_summary_cache already shows its own
+                    # st.spinner internally — no outer spinner needed here.
                     if st.session_state.document_metadata is None:
-                        with st.spinner(
-                            "Generating document metadata (title/summary/topics/TOC)..."
-                        ):
-                            _ensure_metadata_and_summary_cache(
-                                st.session_state.llm,
-                                st.session_state.documents,
-                                uploaded_files,
-                                effective_settings,
-                                force_regenerate=False,
-                            )
+                        _ensure_metadata_and_summary_cache(
+                            st.session_state.llm,
+                            st.session_state.documents,
+                            uploaded_files,
+                            effective_settings,
+                            force_regenerate=False,
+                        )
 
                     sources = list(st.session_state.document_metadata.keys())
 
@@ -657,6 +687,7 @@ with chat_tab:
                                     st.session_state.llm,
                                     st.session_state.documents,
                                     summary_type,
+                                    llm_provider=effective_settings.llm_provider,
                                 )
                             st.session_state.summary_cache[cache_key] = answer
                     else:
@@ -696,6 +727,7 @@ with chat_tab:
 
                         answer = result["answer"]
                         st.session_state.last_sources = result.get("source_documents", [])
+
 
                         if st.session_state.last_sources:
                             with st.expander("Sources used for this answer", expanded=False):
@@ -775,6 +807,7 @@ with summary_tab:
                             st.session_state.llm,
                             st.session_state.documents,
                             summary_type,
+                            llm_provider=effective_settings.llm_provider,
                         )
                     st.session_state.summary_cache[cache_key] = summary
                     st.markdown(summary)
